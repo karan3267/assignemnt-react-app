@@ -28,10 +28,10 @@ jobs:
         run: |
           docker build -t 761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }} .
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::761018874863:role/aws-service-role/replication.ecr.amazonaws.com/AWSServiceRoleForECRReplication
-          aws-region: us-east-1
+        run: |
+          echo "[default]" > ~/.aws/credentials
+          echo "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" >> ~/.aws/credentials
+          echo "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> ~/.aws/credentials
 
       - name: Login to Amazon ECR
         run: |
