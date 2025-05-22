@@ -42,13 +42,32 @@ jobs:
         run: |
           docker push 761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}
 
-      - name: Deploy to Amazon ECS
+      - name: Download current ECS task definition
+        id: task-def
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition react-app-task \
+            --query 'taskDefinition' \
+            > taskdef.json
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Update image in ECS task definition
+        id: update-taskdef
+        run: |
+          IMAGE="761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}"
+
+          jq --arg IMAGE "$IMAGE" '.containerDefinitions[0].image = $IMAGE' taskdef.json > new-taskdef.json
+
+      - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
+          task-definition: new-taskdef.json
+          service: react-app-service
+          cluster: my-cluster
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           region: us-east-1
-          cluster: my-cluster                         # Replace with your ECS cluster name
-          service: react-app-service                  # Replace with your ECS service name
-          task-definition: react-app-task             # Task definition family name
-          image: 761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}
+
