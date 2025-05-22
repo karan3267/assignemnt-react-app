@@ -41,3 +41,14 @@ jobs:
       - name: Push Docker image to ECR
         run: |
           docker push 761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}
+
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          region: us-east-1
+          cluster: my-cluster                         # Replace with your ECS cluster name
+          service: react-app-service                  # Replace with your ECS service name
+          task-definition: react-app-task             # Task definition family name
+          image: 761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}
