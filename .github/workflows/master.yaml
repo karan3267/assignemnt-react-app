@@ -42,32 +42,51 @@ jobs:
         run: |
           docker push 761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}
 
-      - name: Download current ECS task definition
-        id: task-def
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition react-app-task \
-            --query 'taskDefinition' \
-            > taskdef.json
+      - name: Register new ECS task definition (EC2)
+        id: register-task-def
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
-
-      - name: Update image in ECS task definition
-        id: update-taskdef
         run: |
-          IMAGE="761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}"
+          IMAGE=761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}
+          TASK_FAMILY=react-app-task
 
-          jq --arg IMAGE "$IMAGE" '.containerDefinitions[0].image = $IMAGE' taskdef.json > new-taskdef.json
+          echo "Registering new EC2 task definition with image $IMAGE"
 
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: new-taskdef.json
-          service: react-app-service
-          cluster: my-cluster
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          region: us-east-1
+          TASK_DEF_JSON=$(jq -n --arg IMAGE "$IMAGE" --arg FAMILY "$TASK_FAMILY" '{
+            family: $FAMILY,
+            networkMode: "bridge",
+            requiresCompatibilities: ["EC2"],
+            cpu: "256",
+            memory: "512",
+            containerDefinitions: [
+              {
+                name: "react-app",
+                image: $IMAGE,
+                essential: true,
+                portMappings: [
+                  {
+                    containerPort: 80,
+                    protocol: "tcp"
+                  }
+                ]
+              }
+            ]
+          }')
+
+          echo "$TASK_DEF_JSON" > new-taskdef.json
+
+          TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://new-taskdef.json | jq -r '.taskDefinition.taskDefinitionArn')
+
+          echo "task-definition-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
+      - name: Update ECS service with new task definition
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          aws ecs update-service --cluster my-cluster --service react-app-service --task-definition ${{ steps.register-task-def.outputs.task-definition-arn }}
+
 
