@@ -48,7 +48,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
         run: |
-          CLUSTER_NAME=my-cluster
+          CLUSTER_NAME=react-app
           EXISTS=$(aws ecs describe-clusters --clusters $CLUSTER_NAME --query "clusters[?clusterName=='$CLUSTER_NAME'] | length(@)" --output text)
           if [ "$EXISTS" -eq 0 ]; then
             echo "Cluster $CLUSTER_NAME does not exist. Creating..."
@@ -103,7 +103,7 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: |
           SERVICE_NAME=react-app-service
-          CLUSTER_NAME=my-cluster
+          CLUSTER_NAME=react-app
           TASK_DEF_ARN=${{ steps.register-task-def.outputs.task-definition-arn }}
 
           SERVICE_EXISTS=$(aws ecs describe-services --cluster $CLUSTER_NAME --services $SERVICE_NAME --query "services[?status=='ACTIVE'] | length(@)" --output text)
