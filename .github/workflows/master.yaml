@@ -96,10 +96,31 @@ jobs:
 
           echo "task-definition-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
-      - name: Update ECS service with new task definition
+      - name: Create or update ECS service
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
         run: |
-          aws ecs update-service --cluster my-cluster --service react-app-service --task-definition ${{ steps.register-task-def.outputs.task-definition-arn }}
+          SERVICE_NAME=react-app-service
+          CLUSTER_NAME=my-cluster
+          TASK_DEF_ARN=${{ steps.register-task-def.outputs.task-definition-arn }}
+
+          SERVICE_EXISTS=$(aws ecs describe-services --cluster $CLUSTER_NAME --services $SERVICE_NAME --query "services[?status=='ACTIVE'] | length(@)" --output text)
+
+          if [ "$SERVICE_EXISTS" -eq 0 ]; then
+            echo "Service $SERVICE_NAME does not exist. Creating..."
+            aws ecs create-service \
+              --cluster $CLUSTER_NAME \
+              --service-name $SERVICE_NAME \
+              --task-definition $TASK_DEF_ARN \
+              --desired-count 1 \
+              --launch-type EC2 \
+              --deployment-configuration maximumPercent=200,minimumHealthyPercent=100
+          else
+            echo "Service $SERVICE_NAME exists. Updating..."
+            aws ecs update-service \
+              --cluster $CLUSTER_NAME \
+              --service $SERVICE_NAME \
+              --task-definition $TASK_DEF_ARN
+          fi
