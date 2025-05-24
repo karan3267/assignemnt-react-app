@@ -26,7 +26,7 @@ jobs:
           echo "commit_time=$(git show -s --format=%cd --date=format:'%Y-%m-%d' ${{ steps.vars.outputs.sha }})" >> $GITHUB_OUTPUT
       - name: docker build
         run: |
-          docker build -t 761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }} .
+          docker build --platform linux/arm64 -t 761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }} .
       - name: Configure AWS credentials
         run: |
           mkdir -p ~/.aws
@@ -42,85 +42,85 @@ jobs:
         run: |
           docker push 761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}
 
-      - name: Create ECS cluster if not exists
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-east-1
-        run: |
-          CLUSTER_NAME=react-app-v2
-          EXISTS=$(aws ecs describe-clusters --clusters $CLUSTER_NAME --query "clusters[?clusterName=='$CLUSTER_NAME'] | length(@)" --output text)
-          if [ "$EXISTS" -eq 0 ]; then
-            echo "Cluster $CLUSTER_NAME does not exist. Creating..."
-            aws ecs create-cluster --cluster-name $CLUSTER_NAME
-          else
-            echo "Cluster $CLUSTER_NAME already exists."
-          fi
+      # - name: Create ECS cluster if not exists
+      #   env:
+      #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     AWS_DEFAULT_REGION: us-east-1
+      #   run: |
+      #     CLUSTER_NAME=react-app-v2
+      #     EXISTS=$(aws ecs describe-clusters --clusters $CLUSTER_NAME --query "clusters[?clusterName=='$CLUSTER_NAME'] | length(@)" --output text)
+      #     if [ "$EXISTS" -eq 0 ]; then
+      #       echo "Cluster $CLUSTER_NAME does not exist. Creating..."
+      #       aws ecs create-cluster --cluster-name $CLUSTER_NAME
+      #     else
+      #       echo "Cluster $CLUSTER_NAME already exists."
+      #     fi
 
-      - name: Register ECS task definition (EC2)
-        id: register-task-def
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-east-1
-        run: |
-          IMAGE=761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}
-          TASK_FAMILY=react-app-task
+      # - name: Register ECS task definition (EC2)
+      #   id: register-task-def
+      #   env:
+      #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     AWS_DEFAULT_REGION: us-east-1
+      #   run: |
+      #     IMAGE=761018874863.dkr.ecr.us-east-1.amazonaws.com/react-app:master-${{ steps.time.outputs.commit_time }}-${{ steps.vars.outputs.sha }}
+      #     TASK_FAMILY=react-app-task
 
-          echo "Registering new EC2 task definition with image $IMAGE"
+      #     echo "Registering new EC2 task definition with image $IMAGE"
 
-          TASK_DEF_JSON=$(jq -n --arg IMAGE "$IMAGE" --arg FAMILY "$TASK_FAMILY" '{
-            family: $FAMILY,
-            networkMode: "bridge",
-            requiresCompatibilities: ["EC2"],
-            cpu: "256",
-            memory: "512",
-            containerDefinitions: [
-              {
-                name: "react-app",
-                image: $IMAGE,
-                essential: true,
-                portMappings: [
-                  {
-                    containerPort: 80,
-                    protocol: "tcp"
-                  }
-                ]
-              }
-            ]
-          }')
+      #     TASK_DEF_JSON=$(jq -n --arg IMAGE "$IMAGE" --arg FAMILY "$TASK_FAMILY" '{
+      #       family: $FAMILY,
+      #       networkMode: "bridge",
+      #       requiresCompatibilities: ["EC2"],
+      #       cpu: "256",
+      #       memory: "512",
+      #       containerDefinitions: [
+      #         {
+      #           name: "react-app",
+      #           image: $IMAGE,
+      #           essential: true,
+      #           portMappings: [
+      #             {
+      #               containerPort: 80,
+      #               protocol: "tcp"
+      #             }
+      #           ]
+      #         }
+      #       ]
+      #     }')
 
-          echo "$TASK_DEF_JSON" > new-taskdef.json
+      #     echo "$TASK_DEF_JSON" > new-taskdef.json
 
-          TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://new-taskdef.json | jq -r '.taskDefinition.taskDefinitionArn')
+      #     TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://new-taskdef.json | jq -r '.taskDefinition.taskDefinitionArn')
 
-          echo "task-definition-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+      #     echo "task-definition-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
-      - name: Create or update ECS service
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-east-1
-        run: |
-          SERVICE_NAME=react-app-service
-          CLUSTER_NAME=react-app-v2
-          TASK_DEF_ARN=${{ steps.register-task-def.outputs.task-definition-arn }}
+      # - name: Create or update ECS service
+      #   env:
+      #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     AWS_DEFAULT_REGION: us-east-1
+      #   run: |
+      #     SERVICE_NAME=react-app-service
+      #     CLUSTER_NAME=react-app-v2
+      #     TASK_DEF_ARN=${{ steps.register-task-def.outputs.task-definition-arn }}
 
-          SERVICE_EXISTS=$(aws ecs describe-services --cluster $CLUSTER_NAME --services $SERVICE_NAME --query "services[?status=='ACTIVE'] | length(@)" --output text)
+      #     SERVICE_EXISTS=$(aws ecs describe-services --cluster $CLUSTER_NAME --services $SERVICE_NAME --query "services[?status=='ACTIVE'] | length(@)" --output text)
 
-          if [ "$SERVICE_EXISTS" -eq 0 ]; then
-            echo "Service $SERVICE_NAME does not exist. Creating..."
-            aws ecs create-service \
-              --cluster $CLUSTER_NAME \
-              --service-name $SERVICE_NAME \
-              --task-definition $TASK_DEF_ARN \
-              --desired-count 1 \
-              --launch-type EC2 \
-              --deployment-configuration maximumPercent=200,minimumHealthyPercent=100
-          else
-            echo "Service $SERVICE_NAME exists. Updating..."
-            aws ecs update-service \
-              --cluster $CLUSTER_NAME \
-              --service $SERVICE_NAME \
-              --task-definition $TASK_DEF_ARN
-          fi
+      #     if [ "$SERVICE_EXISTS" -eq 0 ]; then
+      #       echo "Service $SERVICE_NAME does not exist. Creating..."
+      #       aws ecs create-service \
+      #         --cluster $CLUSTER_NAME \
+      #         --service-name $SERVICE_NAME \
+      #         --task-definition $TASK_DEF_ARN \
+      #         --desired-count 1 \
+      #         --launch-type EC2 \
+      #         --deployment-configuration maximumPercent=200,minimumHealthyPercent=100
+      #     else
+      #       echo "Service $SERVICE_NAME exists. Updating..."
+      #       aws ecs update-service \
+      #         --cluster $CLUSTER_NAME \
+      #         --service $SERVICE_NAME \
+      #         --task-definition $TASK_DEF_ARN
+      #     fi
